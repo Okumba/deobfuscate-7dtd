@@ -23,73 +23,86 @@ namespace NetworkPatcher
 		public static int success = 0;
 		public static int error = 0;
 
-		public static void Patch(Logger logger, AssemblyDefinition asmCSharp, AssemblyDefinition __reserved)
-		{
-			HelperClass.SetLogger(logger);
+		public static void Patch (Logger logger, AssemblyDefinition asmCSharp, AssemblyDefinition __reserved) {
+			HelperClass.SetLogger (logger);
 			TypeDefinition packageClass = null;
-			foreach (ModuleDefinition mdef in asmCSharp.Modules)
-			{
-				foreach (TypeDefinition tdef in mdef.Types)
-				{
-					foreach (FieldDefinition fdef in tdef.Fields)
-					{
+			foreach (ModuleDefinition mdef in asmCSharp.Modules) {
+				foreach (TypeDefinition tdef in mdef.Types) {
+					foreach (FieldDefinition fdef in tdef.Fields) {
 						if (fdef.Name.Equals ("m_PackageTypeToClass")) {
 							packageClass = tdef;
 							break;
 						}
 					}
-					if (packageClass != null)
+					if (packageClass != null) {
 						break;
+					}
 				}
-				if (packageClass != null)
+				if (packageClass != null) {
 					break;
+				}
 			}
 			if (packageClass == null) {
-				logger.Info("Cannot find m_PackageTypeToClass!");
+				logger.Info ("Cannot find m_PackageTypeToClass!");
 				return;
 			}
-			logger.Info("Found m_PackageTypeToClass!");
+			logger.Info ("Found m_PackageTypeToClass!");
 			packageClass.Name = "Package";
 			foreach (MethodDefinition mdef in packageClass.Methods) {
 				if (mdef.Name.Equals (".cctor")) {
 					cctorMDef = mdef;
 					continue;
 				}
-				if (mdef.IsStatic && mdef.ReturnType.Resolve ().Equals (packageClass) && mdef.Parameters.Count == 1) {
-					if (string.IsNullOrEmpty(mdef.Parameters[0].ParameterType.Namespace)) {
-						(packageTypeEnumDef = mdef.Parameters[0].ParameterType.Resolve()).Name = "PackageType";
-						mdef.Name = "CreatePackage";
+				if (mdef.IsStatic && mdef.ReturnType.Resolve ().Equals (packageClass) && mdef.Parameters.Count == 2) {
+					mdef.Name = "CreatePackage";
+					continue;
+				}
+			}
+			foreach (FieldDefinition fdef in packageClass.Fields) {
+				if (fdef.FieldType.FullName.StartsWith ("System.Collections.Generic.Dictionary")) {
+					if (!fdef.FieldType.IsGenericInstance)
 						continue;
+
+					GenericInstanceType genType = (GenericInstanceType)fdef.FieldType;
+					if (genType.GenericArguments.Count != 2)
+						continue;
+
+					if (string.IsNullOrEmpty (genType.GenericArguments [0].Namespace)) {
+						packageTypeEnumDef = genType.GenericArguments [0].Resolve ();
 					}
 				}
 			}
+
+
 			if (cctorMDef == null) {
 				logger.Error("Cannot find Package.cctor()!");
 				return;
 			}
 			logger.Info("Found Package.cctor()!");
+
+
 			if (packageTypeEnumDef == null) {
 				logger.Error("Cannot find CreatePackage!");
 				return;
 			}
 			logger.Info("Found CreatePackage!");
 
-			bool curFound = false;
-			foreach (MethodDefinition mdef in packageClass.Methods) {
-				if (mdef.IsStatic && mdef.Parameters.Count == 1 && mdef.ReturnType.Resolve().Equals(packageTypeEnumDef) && mdef.Parameters[0].ParameterType.Resolve().FullName.Equals("System.IO.BinaryReader"))
-				{
-					mdef.Name = "ReadPackageType";
-					curFound = true;
-					success++;
-					break;
-				}
-			}
-			if (!curFound) {
-				logger.Warning("Cannot find ReadPackageType!");
-				error++;
-			}
+//			bool curFound = false;
+//			foreach (MethodDefinition mdef in packageClass.Methods) {
+//				if (mdef.IsStatic && mdef.Parameters.Count == 1 && mdef.ReturnType.Resolve().Equals(packageTypeEnumDef) && mdef.Parameters[0].ParameterType.Resolve().FullName.Equals("System.IO.BinaryReader"))
+//				{
+//					mdef.Name = "ReadPackageType";
+//					curFound = true;
+//					success++;
+//					break;
+//				}
+//			}
+//			if (!curFound) {
+//				logger.Warning("Cannot find ReadPackageType!");
+//				error++;
+//			}
+//			logger.Info("Found ReadPackageType!");
 
-			logger.Info("Found ReadPackageType!");
 			PatchVirtualPackageMethods(packageClass, logger, true);
 
 			MethodBody cctorBody = cctorMDef.Body;
